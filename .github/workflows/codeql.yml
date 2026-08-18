@@ -1,0 +1,40 @@
+name: CodeQL (SAST)
+
+# Corresponde al paso "CodeQL (SAST) - Análisis estático" del diagrama.
+on:
+  pull_request:
+    branches: [preprod]
+  push:
+    branches: [preprod]
+  schedule:
+    - cron: '0 6 * * 1' # análisis semanal adicional, lunes 06:00 UTC
+
+jobs:
+  analyze:
+    name: Analizar (Java)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+
+      - name: Build (requerido por CodeQL para Java)
+        run: ./mvnw -B -DskipTests package
+
+      - name: Analizar
+        uses: github/codeql-action/analyze@v3

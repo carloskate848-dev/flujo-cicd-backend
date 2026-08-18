@@ -1,0 +1,97 @@
+name: CD - Despliegue a preprod
+
+# Corresponde a los pasos "Merge a preprod", "Build & package",
+# "Auth federada (OIDC)", "Publicar en S3" y "Ejecutar script (SSM)"
+# del diagrama de flujo.
+on:
+  push:
+    branches: [preprod]
+
+permissions:
+  id-token: write # requerido para autenticación OIDC con AWS
+  contents: read
+
+jobs:
+  build-y-package:
+    name: Build & package (JAR con Maven)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Empaquetar (mvn package)
+        run: ./mvnw -B -DskipTests package
+
+      # Cuando este backend se integre con el frontend Angular en el mismo
+      # pipeline, agregar aquí un job equivalente con "ng build" para el dist.
+      - name: Preparar artefactos de despliegue
+        run: |
+          mkdir -p artefactos
+          cp target/flujo-cicd-backend-*.jar artefactos/flujo-cicd-backend.jar
+          cp deploy/deploy.sh artefactos/deploy.sh
+
+      - name: Publicar artefacto entre jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-preprod
+          path: artefactos
+          retention-days: 7
+
+  publicar-s3:
+    name: Auth OIDC + publicar en S3
+    runs-on: ubuntu-latest
+    needs: [build-y-package]
+    steps:
+      - name: Descargar artefacto
+        uses: actions/download-artifact@v4
+        with:
+          name: build-preprod
+          path: artefactos
+
+      # Auth federada OIDC: GitHub Actions asume un IAM Role en AWS sin
+      # necesidad de guardar credenciales de larga duración como secretos.
+      # Configura previamente el Identity Provider OIDC de GitHub en AWS IAM
+      # y reemplaza AWS_ROLE_ARN / AWS_REGION en los secretos/variables del repo.
+      - name: Configurar credenciales AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Publicar en S3
+        run: |
+          aws s3 cp artefactos/flujo-cicd-backend.jar "s3://${{ vars.S3_DEPLOY_BUCKET }}/flujo-cicd-backend/flujo-cicd-backend.jar"
+          aws s3 cp artefactos/deploy.sh "s3://${{ vars.S3_DEPLOY_BUCKET }}/flujo-cicd-backend/deploy.sh"
+
+  desplegar-ssm:
+    name: Ejecutar script de despliegue (SSM)
+    runs-on: ubuntu-latest
+    needs: [publicar-s3]
+    steps:
+      - name: Configurar credenciales AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Envía el comando a la(s) instancia(s) EC2 destino, identificadas por
+      # tag, para que descarguen el JAR desde S3, lo reemplacen y reinicien
+      # el servicio. Ajusta el Target según tu inventario real.
+      - name: Ejecutar deploy.sh vía SSM
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Environment,Values=preprod" \
+            --parameters "commands=[\"bash /opt/flujo-cicd-backend/deploy.sh\"]" \
+            --comment "Despliegue automático flujo-cicd-backend (preprod)"
+
+# Nota: si algún paso de este workflow falla, configura una notificación de
+# GitHub Actions hacia Slack/email (paso "🔔/🚨" del diagrama) usando, por
+# ejemplo, la acción "slackapi/slack-github-action" en un job final con
+# "if: failure()".
