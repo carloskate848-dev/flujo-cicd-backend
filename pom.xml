@@ -54,20 +54,10 @@
 			<scope>runtime</scope>
 		</dependency>
 
-		<!--
-			FALLA INTENCIONAL PARA EL EJERCICIO DE CI/CD:
-			commons-collections 3.2.1 tiene una vulnerabilidad de deserialización
-			insegura conocida y públicamente documentada (relacionada con la
-			cadena de gadgets usada por ysoserial). Se agrega a propósito para
-			que el job de Trivy / OWASP Dependency-Check del pipeline la marque
-			como hallazgo de tipo "vulnerabilidad de dependencia" (SCA).
-			La corrección, como ejercicio, es actualizar a
-			org.apache.commons:commons-collections4 (última versión estable).
-		-->
 		<dependency>
 			<groupId>commons-collections</groupId>
 			<artifactId>commons-collections</artifactId>
-			<version>3.2.1</version>
+			<version>3.2.2</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

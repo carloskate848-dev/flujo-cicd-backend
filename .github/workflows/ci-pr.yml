@@ -1,7 +1,11 @@
 name: CI - Pull Request a preprod
 
-# Corresponde a los pasos "Pull request", "JaCoCo (Java)", "SonarCloud",
+# Corresponde a los pasos "Pull request", "JaCoCo (Java)",
 # "Trivy / OWASP DC" y "Quality gate" del diagrama de flujo.
+# NOTA: el paso "SonarCloud (cobertura y calidad)" del diagrama se
+# implementa aquí de forma 100% nativa de GitHub (sin cuenta externa):
+# JaCoCo genera la cobertura y el job "cobertura-comentario" la publica
+# como comentario en el Pull Request, fallando si cae debajo del umbral.
 on:
   pull_request:
     branches: [preprod]
@@ -14,6 +18,8 @@ jobs:
   build-y-tests:
     name: Build + JaCoCo (cobertura Java)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -34,14 +40,15 @@ jobs:
           path: target/site/jacoco
           retention-days: 14
 
-  sonarcloud:
-    name: SonarCloud (cobertura y calidad)
+  cobertura-comentario:
+    name: Cobertura y calidad (JaCoCo, comentario en el PR)
     runs-on: ubuntu-latest
     needs: [build-y-tests]
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # SonarCloud necesita el historial completo para el análisis de PR
 
       - name: Configurar JDK 21
         uses: actions/setup-java@v4
@@ -50,23 +57,21 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Cachear paquetes de SonarCloud
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
+      - name: Tests + reporte JaCoCo
+        run: ./mvnw -B clean verify
 
-      # Requiere el secreto SONAR_TOKEN configurado en el repositorio
-      # (Settings > Secrets and variables > Actions) y el proyecto creado
-      # previamente en https://sonarcloud.io
-      - name: Tests + análisis SonarCloud
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          ./mvnw -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }} \
-            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+      # Publica la cobertura como comentario en el PR y falla el job si
+      # cae debajo de los umbrales (equivalente al "quality gate" de
+      # cobertura que antes daba SonarCloud). No requiere ninguna cuenta
+      # externa: usa el GITHUB_TOKEN que GitHub Actions provee automáticamente.
+      - name: Comentar cobertura en el Pull Request
+        uses: madrapps/jacoco-report@v1.7.1
+        with:
+          paths: target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: 'Reporte de cobertura (JaCoCo)'
+          min-coverage-overall: 60
+          min-coverage-changed-files: 60
 
   seguridad-sca:
     name: Trivy / OWASP (vulnerabilidades de dependencias)
@@ -86,7 +91,7 @@ jobs:
         run: ./mvnw -B -DskipTests package
 
       - name: Trivy - escaneo de dependencias (SCA)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -97,7 +102,7 @@ jobs:
   quality-gate:
     name: Quality gate
     runs-on: ubuntu-latest
-    needs: [build-y-tests, sonarcloud, seguridad-sca]
+    needs: [build-y-tests, cobertura-comentario, seguridad-sca]
     if: always()
     steps:
       - name: Verificar que todos los checks pasaron
