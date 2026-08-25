@@ -11,6 +11,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.ObjectMapper;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -103,5 +107,27 @@ class TareaControladorTest {
         mockMvc.perform(get("/api/tareas/buscar").param("texto", "pipeline"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(greaterThanOrEqualTo(1)));
+    }
+
+    @Test
+    void obtenerAdjuntoDevuelveElContenidoDelArchivo() throws Exception {
+        Path directorio = Path.of("adjuntos-tareas");
+        Path archivo = directorio.resolve("nota.txt");
+        Files.createDirectories(directorio);
+        Files.writeString(archivo, "nota de prueba", StandardCharsets.UTF_8);
+
+        try {
+            mockMvc.perform(get("/api/tareas/adjuntos").param("nombre", "nota.txt"))
+                    .andExpect(status().isOk());
+        } finally {
+            Files.deleteIfExists(archivo);
+            Files.deleteIfExists(directorio);
+        }
+    }
+
+    @Test
+    void obtenerAdjuntoConPathTraversalDevuelve400() throws Exception {
+        mockMvc.perform(get("/api/tareas/adjuntos").param("nombre", "../../../../etc/passwd"))
+                .andExpect(status().isBadRequest());
     }
 }

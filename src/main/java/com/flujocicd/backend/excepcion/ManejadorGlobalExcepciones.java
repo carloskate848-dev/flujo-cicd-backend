@@ -18,6 +18,11 @@ public class ManejadorGlobalExcepciones {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(cuerpoError(HttpStatus.NOT_FOUND, ex.getMessage()));
     }
 
+    @ExceptionHandler(AdjuntoInvalidoException.class)
+    public ResponseEntity<Map<String, Object>> manejarAdjuntoInvalido(AdjuntoInvalidoException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(cuerpoError(HttpStatus.BAD_REQUEST, ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> manejarValidacion(MethodArgumentNotValidException ex) {
         String detalle = ex.getBindingResult().getFieldErrors().stream()
