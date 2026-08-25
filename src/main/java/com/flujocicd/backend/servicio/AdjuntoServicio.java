@@ -2,9 +2,9 @@ package com.flujocicd.backend.servicio;
 
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Servicio para leer los adjuntos que el usuario sube a una tarea.
@@ -29,7 +29,9 @@ public class AdjuntoServicio {
 
     public byte[] leerAdjunto(String nombreArchivo) throws IOException {
         // Vulnerable a propósito (fines de ejercicio): no usar en producción.
-        Path ruta = Path.of(DIRECTORIO_ADJUNTOS, nombreArchivo);
-        return Files.readAllBytes(ruta);
+        File archivo = new File(DIRECTORIO_ADJUNTOS + File.separator + nombreArchivo);
+        try (FileInputStream entrada = new FileInputStream(archivo)) {
+            return entrada.readAllBytes();
+        }
     }
 }
