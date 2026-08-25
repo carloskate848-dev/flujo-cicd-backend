@@ -1,5 +1,6 @@
 package com.flujocicd.backend.servicio;
 
+import com.flujocicd.backend.excepcion.AdjuntoInvalidoException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AdjuntoServicioTest {
 
@@ -34,5 +36,11 @@ class AdjuntoServicioTest {
         byte[] contenido = adjuntoServicio.leerAdjunto("prueba.txt");
 
         assertThat(new String(contenido, StandardCharsets.UTF_8)).isEqualTo("contenido de prueba");
+    }
+
+    @Test
+    void leerAdjuntoConPathTraversalLanzaExcepcion() {
+        assertThatThrownBy(() -> adjuntoServicio.leerAdjunto("../../../../etc/passwd"))
+                .isInstanceOf(AdjuntoInvalidoException.class);
     }
 }

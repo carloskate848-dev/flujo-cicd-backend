@@ -124,4 +124,10 @@ class TareaControladorTest {
             Files.deleteIfExists(directorio);
         }
     }
+
+    @Test
+    void obtenerAdjuntoConPathTraversalDevuelve400() throws Exception {
+        mockMvc.perform(get("/api/tareas/adjuntos").param("nombre", "../../../../etc/passwd"))
+                .andExpect(status().isBadRequest());
+    }
 }
