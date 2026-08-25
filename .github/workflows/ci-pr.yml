@@ -18,6 +18,8 @@ jobs:
   build-y-tests:
     name: Build + JaCoCo (cobertura Java)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
